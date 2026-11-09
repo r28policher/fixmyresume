@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Resume Tailor</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#f7f6f2;--card:#fff;--ink:#1f2328;--mute:#6b7280;--line:#e2e0d8;--accent:#1d5fd1;--accent-ink:#fff;--warn:#9a5b00;--warnbg:#fff4de}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#17181a;--card:#222426;--ink:#ececec;--mute:#9aa0a6;--line:#383b3f;--accent:#6ea0ff;--accent-ink:#0b1020;--warn:#f0c070;--warnbg:#3a2f18}}
+:root[data-theme="dark"]{--bg:#17181a;--card:#222426;--ink:#ececec;--mute:#9aa0a6;--line:#383b3f;--accent:#6ea0ff;--accent-ink:#0b1020;--warn:#f0c070;--warnbg:#3a2f18}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+main{max-width:920px;margin:0 auto;padding:24px 16px 56px}
+h1{font-size:1.7rem;margin:0 0 4px}.sub{color:var(--mute);margin:0 0 20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:16px}
+label{display:block;font-weight:600;margin:0 0 6px}
+input[type=url],textarea,select{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit}
+textarea{min-height:130px;resize:vertical}
+.drop{border:2px dashed var(--line);border-radius:10px;padding:18px;text-align:center;cursor:pointer;color:var(--mute)}
+.drop.has{border-color:var(--accent);color:var(--ink)}
+.row{display:grid;grid-template-columns:1fr;gap:14px}.hint{font-size:.85rem;color:var(--mute);margin-top:4px}
+button{font:inherit;font-weight:600;padding:11px 18px;border-radius:8px;border:0;background:var(--accent);color:var(--accent-ink);cursor:pointer}
+button:disabled{opacity:.5;cursor:default}button.sec{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+#status{margin:10px 0 0;color:var(--mute)}#err{color:#c0392b;margin-top:10px}
+.note{background:var(--warnbg);color:var(--warn);padding:10px 12px;border-radius:8px;margin-top:12px;font-size:.92rem}
+#out{display:none}.pv{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:#fff}
+canvas{display:block;max-width:100%;height:auto;margin:0 auto}
+.cols{display:grid;gap:14px;grid-template-columns:1fr}@media(min-width:720px){.cols{grid-template-columns:1fr 1fr}}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.chip{padding:4px 10px;font-size:.85rem;font-weight:500;background:transparent;color:var(--accent);border:1px solid var(--line);border-radius:999px}
+ul{margin:6px 0 0;padding-left:20px}h3{margin:0 0 4px;font-size:1rem}
+</style>
+</head>
+<body>
+<main>
+<h1>Resume Tailor</h1>
+<p class="sub">Upload your PDF resume, add a job post, and get a one-page, ATS-friendly resume that fits the job.</p>
+
+<div class="card">
+ <div class="row">
+  <div>
+   <label>1. Your resume (PDF)</label>
+   <div class="drop" id="drop" tabindex="0">Click to choose a PDF, or drop it here</div>
+   <input type="file" id="file" accept="application/pdf" hidden>
+  </div>
+  <div>
+   <label for="url">2. Job post link</label>
+   <input type="url" id="url" placeholder="https://www.jobstreet.com.ph/job/...">
+  </div>
+  <div>
+   <label for="jd">Job description text (recommended)</label>
+   <textarea id="jd" placeholder="Paste the job description here. Sites like LinkedIn and JobStreet block outside tools from reading their pages, so pasting the text gives the best result."></textarea>
+   <div class="hint">A page like this cannot open job sites for you. If you only add a link, I will try, but it may not work.</div>
+  </div>
+  <div>
+   <label for="ins">Custom instructions (optional)</label>
+   <textarea id="ins" style="min-height:70px" placeholder="e.g. Highlight leadership. Focus on hardware operations."></textarea>
+   <div class="chips" data-t="ins"><button type="button" class="chip">Highlight leadership</button><button type="button" class="chip">Focus on hardware operations</button><button type="button" class="chip">Stress results that are already in my resume</button><button type="button" class="chip">Make it more concise</button></div>
+  </div>
+  <div>
+   <label for="paper">Paper size</label>
+   <select id="paper"><option value="a4">A4</option><option value="letter">Letter</option></select>
+  </div>
+  <div><button id="go">Tailor my resume</button><div id="status"></div><div id="err"></div></div>
+ </div>
+</div>
+
+<div id="out">
+ <div class="card">
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
+   <button id="dl">Download PDF</button><span id="fit" class="hint"></span>
+  </div>
+  <div class="pv"><canvas id="cv"></canvas></div>
+  <div id="warn"></div>
+ </div>
+ <div class="card">
+  <label for="rins">Refine this resume</label>
+  <textarea id="rins" style="min-height:80px" placeholder="Tell me what to change, e.g. Highlight leadership. Focus on hardware operations. Shorten the summary."></textarea>
+  <div class="chips" data-t="rins"><button type="button" class="chip">Highlight leadership</button><button type="button" class="chip">Focus on hardware operations</button><button type="button" class="chip">Stress results that are already in my resume</button><button type="button" class="chip">Make it more concise</button></div>
+  <div style="margin-top:12px"><button id="rf">Re-tailor with this feedback</button><div id="status2" class="hint"></div><div id="err2" style="color:#c0392b"></div></div>
+ </div>
+ <div class="cols">
+  <div class="card"><h3>What I changed</h3><ul id="chg"></ul></div>
+  <div class="card"><h3>Gaps to check</h3><ul id="gap"></ul></div>
+ </div>
+</div>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const setStatus=t=>{$('status').textContent=t;$('status2').textContent=t};
+const setErr=t=>{$('err').textContent=t;$('err2').textContent=t};
+let pdfFile=null,pdfBytes=null,fileName='Resume';
+pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+const drop=$('drop'),fin=$('file');
+drop.onclick=()=>fin.click();
+drop.onkeydown=e=>{if(e.key==='Enter')fin.click()};
+drop.ondragover=e=>e.preventDefault();
+drop.ondrop=e=>{e.preventDefault();setFile(e.dataTransfer.files[0])};
+fin.onchange=()=>setFile(fin.files[0]);
+function setFile(f){if(!f)return;if(f.type!=='application/pdf'&&!/\.pdf$/i.test(f.name)){setErr('Please choose a PDF file.');return}
+ setErr('');pdfFile=f;drop.textContent=f.name;drop.classList.add('has')}
+
+async function extractText(file){
+ const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;let out='';
+ for(let p=1;p<=pdf.numPages;p++){const c=await(await pdf.getPage(p)).getTextContent();let lastY=null;
+  for(const it of c.items){const y=it.transform[5];if(lastY!==null&&Math.abs(y-lastY)>2)out+='\n';else if(lastY!==null&&out&&!/\s$/.test(out))out+=' ';out+=it.str;lastY=y}
+  out+='\n'}
+ return out.trim()}
+
+const clean=s=>String(s==null?'':s).replace(/[\u2018\u2019]/g,"'").replace(/[\u201C\u201D]/g,'"').replace(/[\u2013\u2014]/g,'-').replace(/[^\x20-\x7E\u00A0-\u00FF\u2022]/g,'').replace(/\s+/g,' ').trim();
+
+/* ---- Layout: one column, standard fonts, plain text (ATS-safe) ---- */
+function layout(d,fs,m,size){
+ const doc=new jspdf.jsPDF({unit:'pt',format:size}),W=doc.internal.pageSize.getWidth(),H=doc.internal.pageSize.getHeight(),cw=W-2*m,lh=fs*1.28;
+ let y=m;
+ const font=(st,sz)=>{doc.setFont('helvetica',st);doc.setFontSize(sz||fs)};
+ const wrap=(t,w)=>doc.splitTextToSize(t,w);
+ const head=t=>{y+=fs*.55;font('bold',fs+.5);doc.text(t.toUpperCase(),m,y+fs);y+=fs+2;doc.setLineWidth(.6);doc.line(m,y+1,W-m,y+1);y+=fs*.45};
+ const para=(t,ind=0,bul=false)=>{font('normal');const ls=wrap(t,cw-ind-(bul?10:0));ls.forEach((l,i)=>{if(bul&&i===0)doc.text('\u2022',m+ind,y+fs);doc.text(l,m+ind+(bul?10:0),y+fs);y+=lh})};
+ const two=(l,r,bold=true)=>{font(bold?'bold':'normal');const rw=r?doc.getTextWidth(r)+8:0;const ls=wrap(l,cw-rw);doc.text(ls[0]||'',m,y+fs);
+  if(r){font('normal');doc.text(r,W-m,y+fs,{align:'right'})}y+=lh;for(let i=1;i<ls.length;i++){font(bold?'bold':'normal');doc.text(ls[i],m,y+fs);y+=lh}};
+ font('bold',fs+9);doc.text(d.name,W/2,y+fs+9,{align:'center'});y+=fs+12;
+ font('normal');wrap(d.contact.join(' | '),cw).forEach(l=>{doc.text(l,W/2,y+fs,{align:'center'});y+=lh});
+ if(d.summary){head('Summary');para(d.summary)}
+ if(d.skills.length){head('Skills');d.skills.forEach(s=>{font('bold');const lab=s.label+': ';const lw=doc.getTextWidth(lab);font('normal');
+   const ls=wrap(s.items,cw-lw);font('bold');doc.text(lab,m,y+fs);font('normal');doc.text(ls[0]||'',m+lw,y+fs);y+=lh;
+   wrap(ls.slice(1).join(' '),cw).forEach(l=>{doc.text(l,m,y+fs);y+=lh})})}
+ if(d.experience.length){head('Experience');d.experience.forEach(e=>{two(e.title+(e.company?', '+e.company:''),e.dates);
+   if(e.location){font('italic');doc.text(e.location,m,y+fs);y+=lh}e.bullets.forEach(b=>para(b,4,true));y+=fs*.3})}
+ if(d.education.length){head('Education');d.education.forEach(e=>{two(e.degree+(e.school?', '+e.school:''),e.dates);if(e.details)para(e.details)})}
+ d.extras.forEach(x=>{head(x.heading);x.items.forEach(i=>para(i,4,true))});
+ return{doc,fits:y<=H-m+fs*.3,y}}
+
+function fit(d,size){
+ d=JSON.parse(JSON.stringify(d));let tries=0;
+ while(tries++<40){
+  for(let fs=10.5;fs>=8.75;fs-=.25){const m=fs>=9.75?40:34;const r=layout(d,fs,m,size);if(r.fits)return{...r,fs,trimmed:tries>1}}
+  let best=null;d.experience.forEach((e,i)=>{if(e.bullets.length>2&&(!best||e.bullets.length>=d.experience[best].bullets.length)&&i>=0)best=i});
+  if(best!==null&&d.experience[best].bullets.length>2)d.experience[best].bullets.pop();
+  else if(d.extras.length&&d.extras[d.extras.length-1].items.length){const x=d.extras[d.extras.length-1];x.items.pop();if(!x.items.length)d.extras.pop()}
+  else if(d.summary){d.summary=''}
+  else{const r=layout(d,8.75,30,size);return{...r,fs:8.75,trimmed:true}}}
+ return{...layout(d,8.75,30,size),fs:8.75,trimmed:true}}
+
+/* ---- AI step ---- */
+function normalize(r){const a=x=>Array.isArray(x)?x:[];
+ return{name:clean(r.name)||'Your Name',contact:a(r.contact).map(clean).filter(Boolean),summary:clean(r.summary),
+  skills:a(r.skills).map(s=>({label:clean(s.label),items:clean(a(s.items).join?a(s.items).join(', '):s.items)})).filter(s=>s.label&&s.items),
+  experience:a(r.experience).map(e=>({title:clean(e.title),company:clean(e.company),location:clean(e.location),dates:clean(e.dates),bullets:a(e.bullets).map(clean).filter(Boolean)})),
+  education:a(r.education).map(e=>({school:clean(e.school),degree:clean(e.degree),dates:clean(e.dates),details:clean(e.details)})),
+  extras:a(r.extras).map(x=>({heading:clean(x.heading),items:a(x.items).map(clean).filter(Boolean)})).filter(x=>x.heading&&x.items.length),
+  changes:a(r.changes).map(clean),gaps:a(r.gaps).map(clean)}}
+
+const PROMPT=`You are an expert resume writer. Tailor the resume below to the job post.
+Rules:
+- Use only facts found in the resume. Never invent jobs, dates, degrees, tools, numbers, or skills. If the job asks for something the resume lacks, list it in "gaps".
+- Use clear, basic English. Short sentences. No fancy or pretentious words. Start bullets with simple action verbs.
+- Mirror the job post's key words and phrases where the resume truly supports them (ATS matching).
+- Put the most relevant experience and skills first. Cut or shorten less relevant items.
+- The result must fit on ONE page: summary of 2 sentences max; skills in 3-5 short groups; 3-4 bullets for recent roles, 1-2 for older ones; each bullet under 25 words.
+- Keep contact details exactly as in the resume (name, email, phone, location, links).
+- List experience in reverse chronological order: the current or most recent job first, then older jobs. Do the same for education.
+- If CUSTOM INSTRUCTIONS are given, follow them as far as they stay true to the resume. They never override the rules about not inventing facts, one page, basic English, and reverse chronological order. Mention how you applied them in "changes".
+- If a CURRENT DRAFT is given, improve that draft using the instructions instead of starting over.
+Return ONLY valid JSON, no markdown, in this shape:
+{"needs_text":false,"name":"","contact":[""],"summary":"","skills":[{"label":"","items":["",""]}],
+"experience":[{"title":"","company":"","location":"","dates":"","bullets":[""]}],
+"education":[{"school":"","degree":"","dates":"","details":""}],
+"extras":[{"heading":"Certifications","items":[""]}],
+"changes":["short note on what you changed or emphasized"],"gaps":["job requirement not shown in the resume"]}
+If you have no job description text and cannot read the job link, return {"needs_text":true} only.`;
+
+let current=null;
+document.querySelectorAll('.chip').forEach(b=>b.onclick=()=>{const t=$(b.parentNode.dataset.t);t.value=(t.value.trim()?t.value.trim().replace(/\.?$/,'. '):'')+b.textContent+'.';t.focus()});
+const MO={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+function dv(t){t=t.toLowerCase();if(/present|current|now|ongoing/.test(t))return 1e9;
+ let m=t.match(/(\d{1,2})\s*\/\s*((?:19|20)\d{2})/);if(m)return +m[2]*12+ +m[1];
+ const y=t.match(/(?:19|20)\d{2}/);if(!y)return null;const k=Object.keys(MO).find(k=>t.includes(k));return +y[0]*12+(k?MO[k]:6)}
+function sortRecent(list){return list.map((e,i)=>{const p=e.dates.split(/\s+to\s+|\s*-\s*/i).filter(Boolean);
+  const end=dv(p[p.length-1]||''),st=dv(p[0]||'');return{e,k:(end!==null?end:(st!==null?st:1e8-i)),s:st||0}})
+  .sort((a,b)=>b.k-a.k||b.s-a.s).map(x=>x.e)}
+$('go').onclick=()=>run(false);$('rf').onclick=()=>run(true);
+async function run(refine){
+ setErr('');if(!refine)$('out').style.display='none';
+ if(!pdfFile){setErr('Please upload your resume PDF first.');return}
+ const jd=$('jd').value.trim(),url=$('url').value.trim();
+ if(!jd&&!url){setErr('Add a job link or paste the job description.');return}
+ const ins=[$('ins').value.trim(),refine?$('rins').value.trim():''].filter(Boolean).join('. ');
+ if(refine&&!$('rins').value.trim()){setErr('Type your feedback first.');return}
+ $('go').disabled=$('rf').disabled=true;
+ try{
+  setStatus('Reading your PDF...');
+  const text=await extractText(pdfFile);
+  if(text.length<80)throw new Error('I could not read text from this PDF. It may be a scan. Please upload a text-based PDF.');
+  const sample=await claude.use('sample');
+  if(!sample)throw new Error('The AI step is not available here. Open this page from your Claude account and allow access when asked.');
+  setStatus('Tailoring to the job...');
+  const r=await sample.json(PROMPT+'\n\nJOB LINK: '+(url||'none')+'\n\nJOB DESCRIPTION TEXT:\n'+(jd||'(not provided)')+'\n\nRESUME TEXT:\n'+text+(ins?'\n\nCUSTOM INSTRUCTIONS:\n'+ins:'')+(refine&&current?'\n\nCURRENT DRAFT (JSON):\n'+JSON.stringify(current.d):''),{modelTier:'default',cache:false});
+  if(r.needs_text){$('jd').focus();throw new Error('I could not read that job link. Please paste the job description text in the box above and try again.')}
+  const d=normalize(r);
+  d.experience=sortRecent(d.experience);d.education=sortRecent(d.education);
+  if(!d.experience.length&&!d.education.length)throw new Error('The result looked empty. Please try again.');
+  setStatus('Fitting to one page...');
+  const f=fit(d,$('paper').value);current={d,f};
+  await preview(f.doc);
+  const nm=(d.name||'Resume').replace(/[^A-Za-z0-9]+/g,'_');fileName=nm+'_Resume';
+  $('fit').textContent='One page, text-based PDF, font size '+f.fs+' pt';
+  $('warn').innerHTML=f.trimmed?'<div class="note">To keep it on one page, I removed a few of the least relevant lines.</div>':'';
+  const li=(id,a,e)=>{$(id).innerHTML='';(a.length?a:[e]).forEach(t=>{const l=document.createElement('li');l.textContent=t;$(id).appendChild(l)})};
+  li('chg',d.changes,'No notes.');li('gap',d.gaps,'No clear gaps found.');
+  $('out').style.display='block';$('out').scrollIntoView({behavior:'smooth',block:refine?'start':'start'});setStatus('');
+ }catch(e){setStatus('');setErr((e&&e.message)||'Something went wrong. Please try again.')}
+ $('go').disabled=$('rf').disabled=false}
+
+async function preview(doc){
+ const pdf=await pdfjsLib.getDocument({data:doc.output('arraybuffer')}).promise,pg=await pdf.getPage(1),vp=pg.getViewport({scale:1.6}),cv=$('cv');
+ cv.width=vp.width;cv.height=vp.height;await pg.render({canvasContext:cv.getContext('2d'),viewport:vp}).promise}
+
+$('dl').onclick=async()=>{
+ if(!current)return;const blob=current.f.doc.output('blob');
+ try{const dl=await claude.use('downloads');if(!dl)throw 0;await dl.save({filename:fileName+'.pdf',data:blob})}
+ catch(e){if(e&&e.code==='declined')return;setErr('Download did not start. Please try the button again.')}};
+</script>
+</body>
+</html>
