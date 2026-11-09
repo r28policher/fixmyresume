@@ -54,8 +54,10 @@ ul{margin:6px 0 0;padding-left:20px}h3{margin:0 0 4px;font-size:1rem}
    </select>
    <label for="key" style="margin-top:12px">API key</label>
    <input type="password" id="key" placeholder="Paste your key" autocomplete="off">
-   <label for="model" style="margin-top:12px">Model</label>
-   <input type="text" id="model" autocomplete="off">
+   <label for="msel" style="margin-top:12px">AI model</label>
+   <select id="msel"></select>
+   <input type="text" id="model" placeholder="Type the model name" autocomplete="off" style="display:none;margin-top:8px">
+   <div style="margin-top:8px"><button type="button" class="sec" id="mref" style="padding:6px 12px;font-size:.9rem">Load models from my key</button> <span class="hint" id="mmsg"></span></div>
    <div class="hint" id="khint"></div>
   </div>
   <div>
@@ -191,20 +193,46 @@ Return ONLY valid JSON, no markdown, in this shape:
 If you have no job description text and cannot read the job link, return {"needs_text":true} only.`;
 
 const PROV={
- gemini:{model:'gemini-2.5-flash',link:'aistudio.google.com/apikey',who:'Google',note:'A free tier exists, but Google may use free-tier content to improve its products and limits apply.'},
- groq:{model:'llama-3.3-70b-versatile',url:'https://api.groq.com/openai/v1/chat/completions',link:'console.groq.com/keys',who:'Groq',note:'A free tier exists with daily limits.'},
- openrouter:{model:'meta-llama/llama-3.3-70b-instruct:free',url:'https://openrouter.ai/api/v1/chat/completions',link:'openrouter.ai/keys',who:'OpenRouter',note:'Models ending in ":free" cost nothing but have limits.'},
- anthropic:{model:'claude-sonnet-5-5',link:'console.anthropic.com',who:'Anthropic',note:'Paid, billed per use.'},
- openai:{model:'gpt-4o-mini',url:'https://api.openai.com/v1/chat/completions',link:'platform.openai.com/api-keys',who:'OpenAI',note:'Paid, billed per use.'}};
-const pv=()=>$('prov').value;
-function onProv(){const P=PROV[pv()];let k='',m='';try{k=localStorage.getItem('rt_key_'+pv())||'';m=localStorage.getItem('rt_model_'+pv())||''}catch(e){}
- $('key').value=k;$('model').value=m||P.model;
- $('khint').textContent='Get a key at '+P.link+'. '+P.note+' Your key stays in your browser and goes only to '+P.who+'. Never put it in the code or on GitHub. If you get a model error, replace the model name with a current one from the provider.'}
-function saveSettings(){try{localStorage.setItem('rt_prov',pv());localStorage.setItem('rt_key_'+pv(),$('key').value.trim());localStorage.setItem('rt_model_'+pv(),$('model').value.trim())}catch(e){}}
-try{const p=localStorage.getItem('rt_prov');if(p&&PROV[p])$('prov').value=p}catch(e){}
+ gemini:{models:['gemini-3.5-flash-lite','gemini-3.5-flash','gemini-2.5-flash'],link:'aistudio.google.com/apikey',who:'Google',note:'A free tier exists, but Google may use free-tier content to improve its products and limits apply.'},
+ groq:{models:['llama-3.3-70b-versatile','llama-3.1-8b-instant'],url:'https://api.groq.com/openai/v1/chat/completions',list:'https://api.groq.com/openai/v1/models',link:'console.groq.com/keys',who:'Groq',note:'A free tier exists with daily limits.'},
+ openrouter:{models:['meta-llama/llama-3.3-70b-instruct:free'],url:'https://openrouter.ai/api/v1/chat/completions',list:'https://openrouter.ai/api/v1/models',link:'openrouter.ai/keys',who:'OpenRouter',note:'Models ending in ":free" cost nothing but have limits.'},
+ anthropic:{models:['claude-sonnet-5-5','claude-haiku-5-5','claude-opus-5-5'],list:'https://api.anthropic.com/v1/models?limit=100',link:'console.anthropic.com',who:'Anthropic',note:'Paid, billed per use.'},
+ openai:{models:['gpt-4o-mini','gpt-4o'],url:'https://api.openai.com/v1/chat/completions',list:'https://api.openai.com/v1/models',link:'platform.openai.com/api-keys',who:'OpenAI',note:'Paid, billed per use.'}};
+const pv=()=>$('prov').value,CUSTOM='__custom__';
+const getModel=()=>$('msel').value===CUSTOM?$('model').value.trim():$('msel').value;
+const store={get:k=>{try{return localStorage.getItem(k)}catch(e){return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}}};
+function fillModels(list,sel){list=[...new Set([sel,...list].filter(Boolean))];const m=$('msel');m.innerHTML='';
+ list.forEach(x=>{const o=document.createElement('option');o.value=x;o.textContent=x;m.appendChild(o)});
+ const c=document.createElement('option');c.value=CUSTOM;c.textContent='Other (type a name)...';m.appendChild(c);m.value=sel;$('model').style.display='none'}
+$('msel').onchange=()=>{const c=$('msel').value===CUSTOM;$('model').style.display=c?'block':'none';if(c)$('model').focus()};
+function onProv(){const P=PROV[pv()];let cached=[];try{cached=JSON.parse(store.get('rt_list_'+pv())||'[]')}catch(e){}
+ $('key').value=store.get('rt_key_'+pv())||'';$('mmsg').textContent='';
+ fillModels(cached.length?cached:P.models,store.get('rt_model_'+pv())||P.models[0]);
+ $('khint').textContent='Get a key at '+P.link+'. '+P.note+' Your key stays in your browser and goes only to '+P.who+'. Never put it in the code or on GitHub.'}
+function saveSettings(){store.set('rt_prov',pv());store.set('rt_key_'+pv(),$('key').value.trim());store.set('rt_model_'+pv(),getModel())}
+{const p=store.get('rt_prov');if(p&&PROV[p])$('prov').value=p}
 $('prov').onchange=onProv;onProv();
+$('mref').onclick=async()=>{
+ const key=$('key').value.trim(),P=PROV[pv()],p=pv();if(!key){$('mmsg').textContent='Paste your API key first.';return}
+ $('mref').disabled=true;$('mmsg').textContent='Loading...';
+ try{const h={};let url=P.list;
+  if(p==='gemini'){url='https://generativelanguage.googleapis.com/v1beta/models?pageSize=200';h['x-goog-api-key']=key}
+  else if(p==='anthropic'){h['x-api-key']=key;h['anthropic-version']='2023-06-01';h['anthropic-dangerous-direct-browser-access']='true'}
+  else h.authorization='Bearer '+key;
+  const res=await fetch(url,{headers:h}),j=await res.json().catch(()=>({}));
+  if(!res.ok)throw new Error(res.status===401||res.status===403?'Key not accepted.':'Could not load the list.');
+  let ids;
+  if(p==='gemini')ids=(j.models||[]).filter(x=>(x.supportedGenerationMethods||[]).includes('generateContent')).map(x=>x.name.replace('models/','')).filter(n=>/gemini|gemma/.test(n)&&!/image|tts|embed|live|audio|robot|computer|vision|aqa/.test(n));
+  else{ids=(j.data||[]).map(x=>x.id);
+   if(p==='openai')ids=ids.filter(n=>/^(gpt|o\d)/.test(n)&&!/audio|image|realtime|tts|transcribe|embed|moderation|search|instruct/.test(n));
+   if(p==='groq')ids=ids.filter(n=>!/whisper|guard|tts|playai|orpheus/.test(n));
+   if(p==='openrouter'){const f=ids.filter(n=>n.endsWith(':free')),o=ids.filter(n=>!n.endsWith(':free')).slice(0,40);ids=[...f,...o]}}
+  if(!ids.length)throw new Error('No models found.');
+  store.set('rt_list_'+p,JSON.stringify(ids));const cur=getModel();fillModels(ids,ids.includes(cur)?cur:ids[0]);$('mmsg').textContent='Found '+ids.length+' models. Pick one above.'
+ }catch(e){$('mmsg').textContent=e.message||'Could not load the list.'}
+ $('mref').disabled=false};
 async function callAI(key,prompt){
- const P=PROV[pv()],model=$('model').value.trim()||P.model,h={'content-type':'application/json'};let url,body;
+ const P=PROV[pv()],model=getModel()||P.models[0],h={'content-type':'application/json'};let url,body;
  if(pv()==='anthropic'){url='https://api.anthropic.com/v1/messages';h['x-api-key']=key;h['anthropic-version']='2023-06-01';h['anthropic-dangerous-direct-browser-access']='true';
   body={model,max_tokens:4000,messages:[{role:'user',content:prompt}]}}
  else if(pv()==='gemini'){url='https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent';h['x-goog-api-key']=key;
@@ -213,7 +241,7 @@ async function callAI(key,prompt){
  let res;try{res=await fetch(url,{method:'POST',headers:h,body:JSON.stringify(body)})}catch(e){throw new Error('Could not reach '+P.who+'. Check your internet connection.')}
  const j=await res.json().catch(()=>({}));
  if(!res.ok){const em=j.error&&(j.error.message||(typeof j.error==='string'?j.error:''))||'';
-  throw new Error(res.status===401||res.status===403?'Your API key was not accepted. Please check it.':res.status===429?'You reached the free or rate limit. Wait a minute and try again.':(em||'The AI request failed ('+res.status+').'))}
+  throw new Error(res.status===401||res.status===403?'Your API key was not accepted. Please check it.':res.status===429?'You reached the free or rate limit. Wait a minute and try again.':((em||'The AI request failed ('+res.status+').')+(res.status===404||/model/i.test(em)?' Tip: click "Load models from my key" and choose a current model.':'')))}
  let t='';if(pv()==='anthropic')t=(j.content||[]).map(c=>c.text||'').join('');
  else if(pv()==='gemini')t=((j.candidates||[])[0]?.content?.parts||[]).map(c=>c.text||'').join('');
  else t=(j.choices||[])[0]?.message?.content||'';
