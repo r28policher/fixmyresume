@@ -15,7 +15,7 @@ main{max-width:920px;margin:0 auto;padding:24px 16px 56px}
 h1{font-size:1.7rem;margin:0 0 4px}.sub{color:var(--mute);margin:0 0 20px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:16px}
 label{display:block;font-weight:600;margin:0 0 6px}
-input[type=url],textarea,select{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit}
+input[type=url],input[type=password],input[type=text],textarea,select{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit}
 textarea{min-height:130px;resize:vertical}
 .drop{border:2px dashed var(--line);border-radius:10px;padding:18px;text-align:center;cursor:pointer;color:var(--mute)}
 .drop.has{border-color:var(--accent);color:var(--ink)}
@@ -42,6 +42,21 @@ ul{margin:6px 0 0;padding-left:20px}h3{margin:0 0 4px;font-size:1rem}
    <label>1. Your resume (PDF)</label>
    <div class="drop" id="drop" tabindex="0">Click to choose a PDF, or drop it here</div>
    <input type="file" id="file" accept="application/pdf" hidden>
+  </div>
+  <div>
+   <label for="prov">AI provider</label>
+   <select id="prov">
+    <option value="gemini">Google Gemini (free tier available)</option>
+    <option value="groq">Groq (free tier available)</option>
+    <option value="openrouter">OpenRouter (some free models)</option>
+    <option value="anthropic">Claude (Anthropic)</option>
+    <option value="openai">OpenAI</option>
+   </select>
+   <label for="key" style="margin-top:12px">API key</label>
+   <input type="password" id="key" placeholder="Paste your key" autocomplete="off">
+   <label for="model" style="margin-top:12px">Model</label>
+   <input type="text" id="model" autocomplete="off">
+   <div class="hint" id="khint"></div>
   </div>
   <div>
    <label for="url">2. Job post link</label>
@@ -175,6 +190,35 @@ Return ONLY valid JSON, no markdown, in this shape:
 "changes":["short note on what you changed or emphasized"],"gaps":["job requirement not shown in the resume"]}
 If you have no job description text and cannot read the job link, return {"needs_text":true} only.`;
 
+const PROV={
+ gemini:{model:'gemini-2.5-flash',link:'aistudio.google.com/apikey',who:'Google',note:'A free tier exists, but Google may use free-tier content to improve its products and limits apply.'},
+ groq:{model:'llama-3.3-70b-versatile',url:'https://api.groq.com/openai/v1/chat/completions',link:'console.groq.com/keys',who:'Groq',note:'A free tier exists with daily limits.'},
+ openrouter:{model:'meta-llama/llama-3.3-70b-instruct:free',url:'https://openrouter.ai/api/v1/chat/completions',link:'openrouter.ai/keys',who:'OpenRouter',note:'Models ending in ":free" cost nothing but have limits.'},
+ anthropic:{model:'claude-sonnet-5-5',link:'console.anthropic.com',who:'Anthropic',note:'Paid, billed per use.'},
+ openai:{model:'gpt-4o-mini',url:'https://api.openai.com/v1/chat/completions',link:'platform.openai.com/api-keys',who:'OpenAI',note:'Paid, billed per use.'}};
+const pv=()=>$('prov').value;
+function onProv(){const P=PROV[pv()];let k='',m='';try{k=localStorage.getItem('rt_key_'+pv())||'';m=localStorage.getItem('rt_model_'+pv())||''}catch(e){}
+ $('key').value=k;$('model').value=m||P.model;
+ $('khint').textContent='Get a key at '+P.link+'. '+P.note+' Your key stays in your browser and goes only to '+P.who+'. Never put it in the code or on GitHub. If you get a model error, replace the model name with a current one from the provider.'}
+function saveSettings(){try{localStorage.setItem('rt_prov',pv());localStorage.setItem('rt_key_'+pv(),$('key').value.trim());localStorage.setItem('rt_model_'+pv(),$('model').value.trim())}catch(e){}}
+try{const p=localStorage.getItem('rt_prov');if(p&&PROV[p])$('prov').value=p}catch(e){}
+$('prov').onchange=onProv;onProv();
+async function callAI(key,prompt){
+ const P=PROV[pv()],model=$('model').value.trim()||P.model,h={'content-type':'application/json'};let url,body;
+ if(pv()==='anthropic'){url='https://api.anthropic.com/v1/messages';h['x-api-key']=key;h['anthropic-version']='2023-06-01';h['anthropic-dangerous-direct-browser-access']='true';
+  body={model,max_tokens:4000,messages:[{role:'user',content:prompt}]}}
+ else if(pv()==='gemini'){url='https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent';h['x-goog-api-key']=key;
+  body={contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{temperature:.3,maxOutputTokens:8192,responseMimeType:'application/json'}}}
+ else{url=P.url;h.authorization='Bearer '+key;body={model,temperature:.3,messages:[{role:'user',content:prompt}]};if(pv()!=='openrouter')body.response_format={type:'json_object'}}
+ let res;try{res=await fetch(url,{method:'POST',headers:h,body:JSON.stringify(body)})}catch(e){throw new Error('Could not reach '+P.who+'. Check your internet connection.')}
+ const j=await res.json().catch(()=>({}));
+ if(!res.ok){const em=j.error&&(j.error.message||(typeof j.error==='string'?j.error:''))||'';
+  throw new Error(res.status===401||res.status===403?'Your API key was not accepted. Please check it.':res.status===429?'You reached the free or rate limit. Wait a minute and try again.':(em||'The AI request failed ('+res.status+').'))}
+ let t='';if(pv()==='anthropic')t=(j.content||[]).map(c=>c.text||'').join('');
+ else if(pv()==='gemini')t=((j.candidates||[])[0]?.content?.parts||[]).map(c=>c.text||'').join('');
+ else t=(j.choices||[])[0]?.message?.content||'';
+ const x=t.indexOf('{'),y=t.lastIndexOf('}');if(x<0||y<x)throw new Error('The AI reply was not readable. Please try again.');
+ try{return JSON.parse(t.slice(x,y+1))}catch(e){throw new Error('The AI reply was cut off or broken. Please try again.')}}
 let current=null;
 document.querySelectorAll('.chip').forEach(b=>b.onclick=()=>{const t=$(b.parentNode.dataset.t);t.value=(t.value.trim()?t.value.trim().replace(/\.?$/,'. '):'')+b.textContent+'.';t.focus()});
 const MO={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
@@ -197,10 +241,11 @@ async function run(refine){
   setStatus('Reading your PDF...');
   const text=await extractText(pdfFile);
   if(text.length<80)throw new Error('I could not read text from this PDF. It may be a scan. Please upload a text-based PDF.');
-  const sample=await claude.use('sample');
-  if(!sample)throw new Error('The AI step is not available here. Open this page from your Claude account and allow access when asked.');
+  const key=$('key').value.trim();
+  if(!key)throw new Error('Please paste your API key first.');
+  saveSettings();
   setStatus('Tailoring to the job...');
-  const r=await sample.json(PROMPT+'\n\nJOB LINK: '+(url||'none')+'\n\nJOB DESCRIPTION TEXT:\n'+(jd||'(not provided)')+'\n\nRESUME TEXT:\n'+text+(ins?'\n\nCUSTOM INSTRUCTIONS:\n'+ins:'')+(refine&&current?'\n\nCURRENT DRAFT (JSON):\n'+JSON.stringify(current.d):''),{modelTier:'default',cache:false});
+  const r=await callAI(key,PROMPT+'\n\nJOB LINK: '+(url||'none')+'\n\nJOB DESCRIPTION TEXT:\n'+(jd||'(not provided)')+'\n\nRESUME TEXT:\n'+text+(ins?'\n\nCUSTOM INSTRUCTIONS:\n'+ins:'')+(refine&&current?'\n\nCURRENT DRAFT (JSON):\n'+JSON.stringify(current.d):''));
   if(r.needs_text){$('jd').focus();throw new Error('I could not read that job link. Please paste the job description text in the box above and try again.')}
   const d=normalize(r);
   d.experience=sortRecent(d.experience);d.education=sortRecent(d.education);
@@ -223,8 +268,7 @@ async function preview(doc){
 
 $('dl').onclick=async()=>{
  if(!current)return;const blob=current.f.doc.output('blob');
- try{const dl=await claude.use('downloads');if(!dl)throw 0;await dl.save({filename:fileName+'.pdf',data:blob})}
- catch(e){if(e&&e.code==='declined')return;setErr('Download did not start. Please try the button again.')}};
+ const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=fileName+'.pdf';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000)};
 </script>
 </body>
 </html>
