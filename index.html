@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Resume Tailor v3.5</title>
+<title>Resume Tailor v3.6</title>
 <style>
 /* Palette follows Tailwind: blue-600/700, emerald-50/200/700, rose-50/100/200/700, amber-500, gray scale */
 :root{color-scheme:light;--bg:#f3f4f6;--card:#fff;--ink:#111827;--mute:#6b7280;--line:#e5e7eb;--soft:#f9fafb;--blue:#2563eb;--blue-h:#1d4ed8;--em50:#ecfdf5;--em200:#a7f3d0;--em700:#047857;--ro50:#fff1f2;--ro100:#ffe4e6;--ro200:#fecdd3;--ro700:#be123c;--green:#059669;--amber:#f59e0b;--red:#dc2626;--shadow:0 1px 2px rgba(17,24,39,.06),0 4px 14px rgba(17,24,39,.06)}
@@ -113,11 +113,31 @@ body.busy #loadbar{display:block}@keyframes sl{from{background-position:-50% 0}t
 .tag.bad{background:#fffbeb;color:#b45309;border-color:#fde68a}.tag.bad:hover{background:#fef3c7}.tag.bad.sel{background:#fef3c7;border-color:#f59e0b}
 .tag.ctx{background:#fef3c7;color:#b45309;border-color:#f59e0b}
 @keyframes glow{0%{box-shadow:0 0 0 0 rgba(245,158,11,.55)}60%{box-shadow:0 0 0 8px transparent;transform:scale(1.07)}100%{box-shadow:0 0 0 0 transparent}}
+
+/* v3.6 history tracker */
+.fchip{padding:2px 9px;font-size:.74rem;font-weight:600;background:#fff;color:#374151;border:1px solid #d1d5db;border-radius:99px}
+.fchip:hover:not(:disabled){background:#f3f4f6}.fchip.on{background:var(--blue);border-color:var(--blue);color:#fff}
+#hlist{max-height:none;overflow:visible}
+.hcard{border:1px solid var(--line);border-left:4px solid #9ca3af;border-radius:12px;padding:10px;margin-top:8px;background:#fff}
+.hcard[data-st=applied]{border-left-color:#2563eb}.hcard[data-st=interviewing]{border-left-color:#f59e0b}.hcard[data-st=offered]{border-left-color:#059669}.hcard[data-st=rejected]{border-left-color:#e11d48}
+.hcard.on{box-shadow:0 0 0 2px #bfdbfe}
+.hc-top{display:flex;gap:10px;justify-content:space-between;align-items:flex-start}.hc-main{min-width:0}
+.hc-title{font-weight:700;font-size:.88rem;line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.hc-co{font-size:.8rem;color:var(--mute);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hc-score{position:relative;flex:none;width:44px;height:44px;border-radius:50%;background:conic-gradient(var(--c) calc(var(--p)*1%),#e5e7eb 0);display:grid;place-items:center}
+.hc-score::before{content:'';position:absolute;inset:4px;background:#fff;border-radius:50%}.hc-score span{position:relative;font-size:.68rem;font-weight:800}
+.hc-meta{font-size:.74rem;color:var(--mute);margin:6px 0}
+.hc-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.hc-row .hc-status{margin-right:auto}
+.hc-more{margin-top:8px}.hc-more>summary{font-size:.76rem;color:var(--mute);font-weight:600}.hc-more textarea{min-height:56px;margin:6px 0;font-size:.82rem}
+.stsel,.hc-status{width:auto;border:1px solid transparent;border-radius:99px;padding:3px 8px;font-size:.74rem;font-weight:700;cursor:pointer}
+select.st-saved{background:#f3f4f6;color:#374151}select.st-applied{background:#dbeafe;color:#1d4ed8}select.st-interviewing{background:#fef3c7;color:#b45309}select.st-offered{background:#d1fae5;color:#047857}select.st-rejected{background:#ffe4e6;color:#be123c}
+button.danger{background:#dc2626;border-color:#dc2626;color:#fff}button.danger:hover:not(:disabled){background:#b91c1c}
+.toolbar .stwrap{display:none;align-items:center;gap:6px}.toolbar .stwrap label{margin:0;font-size:.76rem;color:var(--mute)}
 </style>
 </head>
 <body>
 <div id="loadbar"></div>
-<header><div class="brand"><div class="logo">R</div>Resume Tailor <span class="ver">v3.5</span></div><div class="secure">&#128274; Your key and files stay in this browser</div></header>
+<header><div class="brand"><div class="logo">R</div>Resume Tailor <span class="ver">v3.6</span></div><div class="secure">&#128274; Your key and files stay in this browser</div></header>
 
 <div class="app">
 
@@ -143,7 +163,13 @@ body.busy #loadbar{display:block}@keyframes sl{from{background-position:-50% 0}t
   <div style="margin-top:14px"><button id="go" class="act wide">Tailor Resume</button></div>
  </div>
 
- <div class="panel"><details open class="drawer"><summary id="hsum">History</summary><div id="hlist"></div></details></div>
+ <div class="panel"><details open class="drawer" id="histBox"><summary id="hsum">History</summary>
+  <div id="hstats" class="hint" style="margin-top:8px"></div>
+  <div id="hchips" class="chips" style="margin-top:8px"></div>
+  <div class="line" style="margin-top:8px;flex-wrap:nowrap"><input type="text" id="hq" placeholder="Search company, title or notes" aria-label="Search history"><select id="hs" aria-label="Sort history" style="width:auto"><option value="new">Newest</option><option value="score">Best match</option><option value="company">Company A-Z</option></select></div>
+  <div id="hlist"></div>
+  <div class="line" style="margin-top:12px"><button class="ghost sm" id="hexp">Export backup</button><button class="ghost sm" id="himp">Import</button><input type="file" id="hfile" accept="application/json" hidden></div>
+ </details></div>
 
  <div class="panel"><details open class="drawer" id="aiBox"><summary>AI provider <span class="badge">Local storage</span></summary>
   <div class="stack" style="margin-top:10px">
@@ -162,6 +188,7 @@ body.busy #loadbar{display:block}@keyframes sl{from{background-position:-50% 0}t
   <button id="dldocx" class="sec tb" disabled>Download Word (Editable)</button>
   <button id="cptext" class="sec tb" disabled>Copy Text</button>
   <span class="pill" id="fit" style="display:none"></span>
+  <span class="stwrap" id="stwrap"><label for="curStatus">Status</label><select id="curStatus" class="stsel st-saved" aria-label="Application status"></select></span>
  </div>
  <div class="stage">
   <div class="empty" id="pph"><b>Your tailored resume will appear here</b>One page, ATS-friendly, plain text.</div>
@@ -451,25 +478,67 @@ Return ONLY valid JSON: {"letter":"the full letter, with \\n for line breaks"}`;
 let cur=null,f=null,tm=null,tc=null,lastPct=0,lastSig='',popEl=null,pendingFocus=null;const ctxKw=new Set();
 const later=()=>{clearTimeout(tm);tm=setTimeout(()=>{tm=null;refresh()},600)};
 async function flush(){if(tm){clearTimeout(tm);tm=null;await refresh()}}
-const hist=()=>{try{return JSON.parse(store.get('rt_hist')||'[]')}catch(e){return[]}};
-function saveRec(){if(!cur)return;let h=hist().filter(r=>r.id!==cur.id);h.unshift(JSON.parse(JSON.stringify(cur)));h=h.slice(0,20);
- while(h.length&&!store.set('rt_hist',JSON.stringify(h)))h.pop();renderHist()}
-function renderHist(){const h=hist();$('hsum').textContent='History ('+h.length+')';const box=$('hlist');box.innerHTML='';
- if(!h.length){box.innerHTML='<div class="hint">Tailored resumes you create will appear here. They are saved only in this browser.</div>';return}
- h.forEach(r=>{const row=document.createElement('div');row.className='hrow';const t=document.createElement('div');t.className='hmain';t.title='Open';
-  t.innerHTML='<b></b><div class="hint" style="margin:0"></div>';
-  t.firstChild.textContent=new Date(r.ts).toLocaleDateString(undefined,{month:'short',day:'numeric'})+': '+(r.title||'Untitled job')+(r.company?' ('+r.company+')':'');
-  t.lastChild.textContent=(r.score!=null?'Match '+r.score+'%':'')+(r.cover?(r.score!=null?' | ':'')+'cover letter':'');
-  t.onclick=()=>openRec(r.id);
-  const bar=document.createElement('div');bar.className='line';bar.style.flexWrap='nowrap';
-  const mk=(txt,fn,ttl)=>{const b=document.createElement('button');b.className='ghost sm';b.textContent=txt;b.title=ttl;b.onclick=fn;bar.appendChild(b)};
-  mk('PDF',()=>saveBlob(fit(r.d,r.paper).doc.output('blob'),fname(r.d,'Resume')+'.pdf'),'Download PDF');
-  mk('Word',async()=>{const x=fit(r.d,r.paper);saveBlob(await resumeDocx(x.d,x.fs,x.m,r.paper),fname(r.d,'Resume')+'.docx')},'Download Word file');
-  mk('\u2715',()=>{store.set('rt_hist',JSON.stringify(hist().filter(z=>z.id!==r.id)));renderHist()},'Delete');
-  row.append(t,bar);box.appendChild(row)})}
+const STATUS=[['saved','Saved'],['applied','Applied'],['interviewing','Interviewing'],['offered','Offered'],['rejected','Rejected']];
+const SLAB=Object.fromEntries(STATUS),HMAX=100;
+let hFilter='all',hSort='new',hQuery='';const hOpen=new Set();
+const hist=()=>{let h;try{h=JSON.parse(store.get('rt_hist')||'[]')}catch(e){h=[]}if(!Array.isArray(h))h=[];return h.map(r=>{r.status=SLAB[r.status]?r.status:'saved';r.notes=r.notes||'';return r})};
+function putHist(h){h=h.slice(0,HMAX);if(store.set('rt_hist',JSON.stringify(h)))return true;
+ h.forEach(r=>{if(!cur||r.id!==cur.id)r.jd=''});if(store.set('rt_hist',JSON.stringify(h)))return true;
+ setErr('Browser storage is full. Delete some saved sessions or export a backup.');return false}
+function saveRec(){if(!cur)return;cur.upd=Date.now();const rec=JSON.parse(JSON.stringify(cur));putHist([rec,...hist().filter(r=>r.id!==cur.id)]);renderHist()}
+function updateRec(id,patch,render=true){const h=hist(),i=h.findIndex(x=>x.id===id);if(i>=0){Object.assign(h[i],patch);putHist(h)}
+ if(cur&&cur.id===id)Object.assign(cur,patch);syncStatus();if(render)renderHist()}
+function setAppStatus(id,v){const r=hist().find(x=>x.id===id)||(cur&&cur.id===id?cur:null);if(!r)return;const now=Date.now(),p={status:v,statusAt:now};
+ if(['applied','interviewing','offered'].includes(v)&&!r.appliedAt)p.appliedAt=now;updateRec(id,p);flash('Marked as '+SLAB[v]+'.')}
+function syncStatus(){const w=$('stwrap');if(!cur){w.style.display='none';return}w.style.display='inline-flex';const s=$('curStatus');s.value=cur.status||'saved';s.className='stsel st-'+s.value}
+$('curStatus').innerHTML=STATUS.map(([k,l])=>'<option value="'+k+'">'+l+'</option>').join('');
+$('curStatus').onchange=()=>{if(cur)setAppStatus(cur.id,$('curStatus').value)};
+function meta(r){let title=(r.title||'').trim(),co=(r.company||'').trim();
+ if(!title&&r.jd){const l=r.jd.split(/\n/).map(x=>x.trim()).find(x=>x.length>3&&x.length<80);if(l)title=l}
+ if(!co&&r.url){try{co=new URL(r.url).hostname.replace(/^www\./,'')}catch(e){}}
+ return{title:title||'Untitled role',company:co||'Company not found'}}
+const scol=p=>p>=85?'#059669':p>=70?'#f59e0b':'#dc2626',dshort=ts=>new Date(ts).toLocaleDateString(undefined,{month:'short',day:'numeric'});
+function clearWorkspace(){clearTimeout(tm);tm=null;cur=null;f=null;hidePop();lastSig='';lastPct=0;ctxKw.clear();
+ $('rres').style.display='none';$('pres').style.display='none';$('rph').style.display='';$('pph').style.display='';$('fit').style.display='none';all('.tb',b=>b.disabled=true);syncStatus();updSummary()}
+function delRec(id){const was=cur&&cur.id===id;putHist(hist().filter(x=>x.id!==id));hOpen.delete(id);if(was)clearWorkspace();renderHist();flash('Session deleted.')}
+function histCard(r){const m=meta(r),el=document.createElement('div'),p=r.score;el.className='hcard'+(cur&&cur.id===r.id?' on':'');el.dataset.st=r.status;
+ el.innerHTML='<div class="hc-top"><div class="hc-main"><div class="hc-title"></div><div class="hc-co"></div></div><div class="hc-score" title="ATS match score" style="--p:'+(p||0)+';--c:'+(p==null?'#9ca3af':scol(p))+'"><span>'+(p==null?'-':p+'%')+'</span></div></div>'
+  +'<div class="hc-meta"></div><div class="hc-row"><select class="hc-status" aria-label="Application status"></select><button class="sm" data-a="open" title="Restore this session">Restore</button><button class="ghost sm" data-a="del" title="Delete this session">Delete</button></div>'
+  +'<details class="hc-more"><summary>Notes and downloads</summary><textarea placeholder="Notes: recruiter, interview date, salary..."></textarea><div class="line"><button class="ghost sm" data-a="pdf">PDF</button><button class="ghost sm" data-a="docx">Word</button><button class="ghost sm" data-a="link">Job link</button></div></details>';
+ el.querySelector('.hc-title').textContent=m.title;el.querySelector('.hc-co').textContent=m.company;el.querySelector('.hc-co').title=m.company;
+ el.querySelector('.hc-meta').textContent='Saved '+dshort(r.ts)+(r.appliedAt?' | Applied '+dshort(r.appliedAt):'')+(r.cover?' | Cover letter':'');
+ const sel=el.querySelector('.hc-status');sel.innerHTML=STATUS.map(([k,l])=>'<option value="'+k+'">'+l+'</option>').join('');sel.value=r.status;sel.className='hc-status st-'+r.status;sel.onchange=()=>setAppStatus(r.id,sel.value);
+ const q=a=>el.querySelector('[data-a="'+a+'"]'),det=el.querySelector('details'),ta=el.querySelector('textarea');
+ q('open').onclick=()=>openRec(r.id);
+ let armed=null;q('del').onclick=()=>{const b=q('del');if(armed){clearTimeout(armed);delRec(r.id);return}b.textContent='Confirm';b.classList.add('danger');armed=setTimeout(()=>{armed=null;b.textContent='Delete';b.classList.remove('danger')},3000)};
+ q('pdf').onclick=()=>saveBlob(fit(r.d,r.paper).doc.output('blob'),fname(r.d,'Resume')+'.pdf');
+ q('docx').onclick=async()=>{const x=fit(r.d,r.paper);saveBlob(await resumeDocx(x.d,x.fs,x.m,r.paper),fname(r.d,'Resume')+'.docx')};
+ if(r.url)q('link').onclick=()=>window.open(r.url,'_blank','noopener');else{q('link').disabled=true;q('link').title='No job link saved'}
+ det.open=hOpen.has(r.id);det.ontoggle=()=>{det.open?hOpen.add(r.id):hOpen.delete(r.id)};
+ ta.value=r.notes;let nt;ta.oninput=()=>{clearTimeout(nt);nt=setTimeout(()=>updateRec(r.id,{notes:ta.value},false),500)};
+ return el}
+function renderHist(){const A=hist(),box=$('hlist');$('hsum').textContent='History ('+A.length+')';
+ const cnt=k=>k==='all'?A.length:A.filter(r=>r.status===k).length,ch=$('hchips');ch.innerHTML='';
+ [['all','All'],...STATUS].forEach(([k,l])=>{const b=document.createElement('button');b.type='button';b.className='fchip'+(hFilter===k?' on':'');b.textContent=l+' '+cnt(k);b.onclick=()=>{hFilter=k;renderHist()};ch.appendChild(b)});
+ const sc=A.filter(r=>r.score!=null);$('hstats').textContent=A.length?A.length+' tracked | avg match '+(sc.length?Math.round(sc.reduce((a,r)=>a+r.score,0)/sc.length)+'%':'n/a')+' | '+(cnt('applied')+cnt('interviewing'))+' active':'';
+ let L=A.filter(r=>hFilter==='all'||r.status===hFilter);
+ if(hQuery){const q=hQuery.toLowerCase();L=L.filter(r=>{const m=meta(r);return (m.title+' '+m.company+' '+r.notes).toLowerCase().includes(q)})}
+ L.sort(hSort==='score'?(a,b)=>(b.score||0)-(a.score||0):hSort==='company'?(a,b)=>meta(a).company.localeCompare(meta(b).company):(a,b)=>(b.upd||b.ts)-(a.upd||a.ts));
+ box.innerHTML='';$('hexp').disabled=!A.length;
+ if(!A.length){box.innerHTML='<div class="hint" style="margin-top:8px">Tailored resumes you create appear here as cards. Track each job by status. Everything is saved only in this browser.</div>';return}
+ if(!L.length){box.innerHTML='<div class="hint" style="margin-top:8px">No sessions match. <a href="#" id="hclr">Clear filters</a></div>';$('hclr').onclick=e=>{e.preventDefault();hFilter='all';hQuery='';$('hq').value='';renderHist()};return}
+ L.forEach(r=>box.appendChild(histCard(r)))}
+$('hq').oninput=()=>{hQuery=$('hq').value.trim();renderHist()};$('hs').onchange=()=>{hSort=$('hs').value;renderHist()};
+$('hexp').onclick=()=>{const h=hist();if(!h.length)return;saveBlob(new Blob([JSON.stringify({app:'resume-tailor',version:'3.6',exported:new Date().toISOString(),history:h},null,1)],{type:'application/json'}),'resume-tailor-history-'+new Date().toISOString().slice(0,10)+'.json')};
+$('himp').onclick=()=>$('hfile').click();
+$('hfile').onchange=async()=>{const fl=$('hfile').files[0];$('hfile').value='';if(!fl)return;setErr('');
+ try{const j=JSON.parse(await fl.text()),inc=arr(j.history||j),have=new Set(hist().map(r=>r.id)),add=inc.filter(r=>r&&r.id&&!have.has(r.id)&&r.d&&Array.isArray(r.d.experience)&&Array.isArray(r.d.skills));
+  if(!add.length){flash('Nothing new to import.');return}
+  if(putHist([...hist(),...add].sort((a,b)=>(b.upd||b.ts||0)-(a.upd||a.ts||0)))){renderHist();flash('Imported '+add.length+' session'+(add.length>1?'s':'')+'.')}}
+ catch(e){setErr('That file is not a valid history backup.')}};
 async function openRec(id){const r=hist().find(x=>x.id===id);if(!r)return;await flush();cur=JSON.parse(JSON.stringify(r));cur.d.h=cur.d.h||{};lastPct=0;lastSig='';ctxKw.clear();hidePop();
  $('url').value=cur.url||'';$('jd').value=cur.jd||'';$('paper').value=cur.paper||'a4';resumeName=resumeName||'From history';updSummary();
- showOut();renderAll();await refresh(false);focusPreview()}
+ showOut();renderAll();await refresh(false);renderHist();focusPreview()}
 function showOut(){$('rres').style.display='flex';$('pres').style.display='block';$('rph').style.display='none';$('pph').style.display='none';$('fit').style.display='inline-block';all('.tb',b=>b.disabled=false)}
 function focusPreview(){if(window.innerWidth<1180)$('center').scrollIntoView({behavior:'smooth'})}
 function renderAll(){
@@ -560,7 +629,7 @@ function renderCtx(){const b=$('ctx');b.innerHTML='';$('ctxwrap').style.display=
 async function refresh(save=true){if(!cur)return;f=fit(cur.d,cur.paper);
  $('fit').textContent=(cur.paper==='a4'?'A4':'Letter')+' | 1 page | '+f.fs+' pt';
  $('sheet').classList.toggle('over',f.trimmed);$('ovbar').style.display=f.trimmed?'flex':'none';
- renderSheet();renderScore();placePop();updSummary();if(save!==false)saveRec()}
+ renderSheet();renderScore();placePop();updSummary();syncStatus();if(save!==false)saveRec()}
 $('paper').onchange=()=>{if(cur){cur.paper=$('paper').value;lastSig='';refresh()}};
 
 /* ---------- actions ---------- */
@@ -582,7 +651,7 @@ async function run(refine){setErr('');
   const d=normalize(r);if(!d.experience.length&&!d.education.length)throw new Error('The result looked empty. Please try again.');
   let kw=parseKw(r.keywords);if(!kw.length&&cur)kw=kwList();
   const keep=refine&&cur,bl=base.toLowerCase();
-  cur={id:keep?cur.id:Date.now(),ts:Date.now(),title:clean(r.job_title)||(keep?cur.title:''),company:clean(r.company)||(keep?cur.company:''),url,jd:jd.slice(0,8000),d,kw,
+  cur={id:keep?cur.id:Date.now(),ts:keep?cur.ts:Date.now(),status:keep?(cur.status||'saved'):'saved',statusAt:keep?cur.statusAt:Date.now(),appliedAt:keep?cur.appliedAt:null,notes:keep?(cur.notes||''):'',title:clean(r.job_title)||(keep?cur.title:''),company:clean(r.company)||(keep?cur.company:''),url,jd:jd.slice(0,8000),d,kw,
    origKw:kw.filter(k=>has(bl,k.t)).map(k=>k.t),cover:keep?cur.cover:'',paper:$('paper').value,changes:arr(r.changes).map(clean),gaps:arr(r.gaps).map(clean)};
   if(!keep)lastPct=0;lastSig='';hidePop();ctxKw.clear();$('rins').value='';
   setStatus('Fitting to one page...');showOut();renderAll();await refresh();setInOpen(false);focusPreview();setStatus('')
