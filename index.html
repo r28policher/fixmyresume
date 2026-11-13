@@ -79,7 +79,7 @@ details>summary{cursor:pointer;font-weight:600;list-style:none}details>summary::
 ul{margin:6px 0 0;padding-left:20px;font-size:.86rem}
 #toast{position:fixed;left:50%;bottom:18px;transform:translate(-50%,20px);opacity:0;pointer-events:none;transition:.25s;z-index:50;max-width:min(92vw,520px);padding:10px 14px;border-radius:10px;background:#111827;color:#fff;font-size:.88rem;box-shadow:0 8px 24px rgba(0,0,0,.25);display:flex;gap:10px;align-items:center}
 #toast.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}#toast.err{background:var(--red)}
-#toast button{padding:0 6px;background:transparent;color:inherit;font-size:1.1rem}
+#toast button{padding:0 6px;background:transparent;color:inherit;font-size:1.1rem}#toast #toastc{font-size:.8rem;padding:2px 10px;border:1px solid rgba(255,255,255,.6);border-radius:99px}
 #loadbar{position:fixed;top:0;left:0;right:0;height:3px;display:none;z-index:60;background:linear-gradient(90deg,transparent,var(--blue),transparent);background-size:50% 100%;background-repeat:no-repeat;animation:sl 1.1s linear infinite}
 body.busy #loadbar{display:block}@keyframes sl{from{background-position:-50% 0}to{background-position:150% 0}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
@@ -157,6 +157,7 @@ button.danger{background:#dc2626;border-color:#dc2626;color:#fff}button.danger:h
    <div><label for="core">Core skills (optional)</label><textarea id="core" style="min-height:56px" placeholder="True skills to always keep, e.g. Excel, customer service"></textarea></div>
    <div><label for="pfname">Save as profile</label><div class="line"><input type="text" id="pfname" placeholder="e.g. Master resume"><button type="button" class="ghost sm" id="pfsave">Save</button></div></div>
    <div><label for="url">Job post link</label><input type="url" id="url" placeholder="https://www.jobstreet.com.ph/job/..."></div>
+   <div><label for="co">Company name</label><input type="text" id="co" maxlength="80" placeholder="e.g. Accenture" autocomplete="off"><div class="hint">The company you are applying to. It shows in your History.</div></div>
    <div><label for="jd">Job description text (recommended)</label><textarea id="jd" placeholder="Paste the job description here. Job sites block outside tools from reading their pages, so pasting the text works best."></textarea></div>
    <div><label for="ins">Custom instructions (optional)</label><textarea id="ins" style="min-height:56px" placeholder="e.g. Highlight leadership. Focus on hardware operations."></textarea><div class="chips" data-t="ins"></div></div>
    <div><label for="paper">Paper size</label><select id="paper"><option value="a4">A4</option><option value="letter">Letter</option></select></div>
@@ -241,7 +242,7 @@ button.danger{background:#dc2626;border-color:#dc2626;color:#fff}button.danger:h
 </aside>
 </div>
 
-<div id="toast" role="status" aria-live="polite"><span id="toastmsg"></span><button id="toastx" aria-label="Dismiss">&times;</button></div>
+<div id="toast" role="status" aria-live="polite"><span id="toastmsg"></span><button id="toastc" style="display:none">Cancel</button><button id="toastx" aria-label="Dismiss">&times;</button></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
@@ -250,10 +251,11 @@ button.danger{background:#dc2626;border-color:#dc2626;color:#fff}button.danger:h
 <script>
 const $=id=>document.getElementById(id);
 const all=(sel,fn)=>document.querySelectorAll(sel).forEach(fn);
-let stat='',errm='';
-function toast(){const t=$('toast'),m=errm||stat;$('toastmsg').textContent=m;t.className=m?'show'+(errm?' err':''):''}
+let stat='',errm='',ctl=null,cancelled=false,timedOut=false;const AI_TIMEOUT=90000;
+function toast(){const t=$('toast'),m=errm||stat;$('toastmsg').textContent=m;$('toastc').style.display=ctl?'inline-flex':'none';t.className=(m||ctl)?'show'+(errm?' err':''):''}
 const setStatus=t=>{stat=t;toast()},setErr=t=>{errm=t;toast()};
 const flash=t=>{setStatus(t);setTimeout(()=>{if(stat===t)setStatus('')},2600)};
+$('toastc').onclick=()=>{cancelled=true;if(ctl)ctl.abort()};
 $('toastx').onclick=()=>{errm='';stat='';toast()};
 const busy=b=>{all('.act',e=>e.disabled=b);document.body.classList.toggle('busy',b)};
 const esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
@@ -310,8 +312,11 @@ async function callAI(key,prompt){
  else if(pv()==='gemini'){url='https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent';h['x-goog-api-key']=key;
   body={contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{temperature:.3,maxOutputTokens:8192,responseMimeType:'application/json'}}}
  else{url=P.url;h.authorization='Bearer '+key;body={model,temperature:.3,messages:[{role:'user',content:prompt}]};if(pv()!=='openrouter')body.response_format={type:'json_object'}}
- let res;try{res=await fetch(url,{method:'POST',headers:h,body:JSON.stringify(body)})}catch(e){throw new Error('Could not reach '+P.who+'. Check your internet connection.')}
- const j=await res.json().catch(()=>({}));
+ cancelled=false;timedOut=false;ctl=new AbortController();toast();const to=setTimeout(()=>{timedOut=true;ctl.abort()},AI_TIMEOUT);let res=null,j={};
+ try{res=await fetch(url,{method:'POST',headers:h,body:JSON.stringify(body),signal:ctl.signal});j=await res.json().catch(()=>({}))}catch(e){}finally{clearTimeout(to);ctl=null;toast()}
+ if(cancelled)throw new Error('Cancelled.');
+ if(timedOut)throw new Error('The AI did not answer within '+AI_TIMEOUT/1000+' seconds. Try again, or choose a faster model in the AI provider box.');
+ if(!res)throw new Error('Could not reach '+P.who+'. Check your internet connection or try another provider.');
  if(!res.ok){const em=j.error&&(j.error.message||(typeof j.error==='string'?j.error:''))||'';
   throw new Error(res.status===401||res.status===403?'Your API key was not accepted. Please check it.':res.status===429?'You reached the free or rate limit. Wait a minute and try again.':((em||'The AI request failed ('+res.status+').')+(res.status===404||/model/i.test(em)?' Tip: click "Load models from my key" and choose a current model.':'')))}
  let t='';if(pv()==='anthropic')t=(j.content||[]).map(c=>c.text||'').join('');
@@ -403,13 +408,20 @@ function layout(d,fs,m,size){
  if(d.education.length){head(hd(d,'education'));d.education.forEach(e=>{two(e.degree+(e.school?', '+e.school:''),e.dates);if(e.details)para(e.details)})}
  d.extras.forEach(x=>{head(x.heading);x.items.forEach(i=>para(i,4,true))});
  return{doc,fits:y<=H-m+fs*.3,y,marks,W,H,m}}
-function fit(d0,size){const d=JSON.parse(JSON.stringify(d0));
- for(let t=0;t<60;t++){
-  for(let fs=10.5;fs>=8.75;fs-=.25){const m=fs>=9.75?40:34,r=layout(d,fs,m,size);if(r.fits)return{...r,fs,m,d,trimmed:t>0}}
-  let best=null;d.experience.forEach((e,i)=>{if(e.bullets.length>2&&(best===null||e.bullets.length>=d.experience[best].bullets.length))best=i});
-  if(best!==null)d.experience[best].bullets.pop();
+const SIZES=[];for(let x=10.5;x>=8.75;x-=.25)SIZES.push(+x.toFixed(2));
+const mFor=fs=>fs>=9.75?40:34;
+function fit(d0,size){const d=JSON.parse(JSON.stringify(d0));let trims=0;
+ const test=fs=>layout(d,fs,mFor(fs),size),last=SIZES.length-1;
+ for(let guard=0;guard<300;guard++){
+  const small=test(SIZES[last]);
+  if(small.fits){let lo=0,hi=last,best=small;
+   while(lo<hi){const mid=(lo+hi)>>1,r=test(SIZES[mid]);if(r.fits){hi=mid;best=r}else lo=mid+1}
+   return{...best,fs:SIZES[hi],m:mFor(SIZES[hi]),d,trimmed:trims>0}}
+  let bi=null;d.experience.forEach((e,i)=>{if(e.bullets.length>2&&(bi===null||e.bullets.length>=d.experience[bi].bullets.length))bi=i});
+  if(bi!==null)d.experience[bi].bullets.pop();
   else if(d.extras.length){const x=d.extras[d.extras.length-1];x.items.pop();if(!x.items.length)d.extras.pop()}
-  else if(d.summary)d.summary='';else break}
+  else if(d.summary)d.summary='';else break;
+  trims++}
  return{...layout(d,8.75,30,size),fs:8.75,m:30,d,trimmed:true}}
 
 /* ---------- DOCX (editable Word file) ---------- */
@@ -454,14 +466,15 @@ Rules:
 - Put the most relevant experience and skills first. Cut or shorten less relevant items.
 - The result must fit on ONE page: summary of 2 sentences max; skills in 3-5 short groups; 3-4 bullets for recent roles, 1-2 for older ones; each bullet under 25 words.
 - Keep contact details exactly as in the resume (name, email, phone, location, links).
-- "job_title" and "company": the exact job title and the hiring company's name from the job post. The company is the employer, never the job site (for example JobStreet or LinkedIn). Use "" if the post does not say.
+- "job_title": the exact job title from the job post. Use "" if the post does not say.
+- COMPANY APPLYING TO is given by the user. Use it only as context. Never invent facts about the company.
 - List experience in reverse chronological order: the current or most recent job first. Do the same for education.
 - "keywords": the 15 to 25 most important skills, tools, qualifications and terms in the job post. Keep each term short (1 to 3 words), written as the job post writes it. Set "type" to "required" for must-have items (for example under "requirements", "must have", "minimum"), "preferred" for nice-to-have items (for example "preferred", "a plus", "bonus"), and "general" when the post does not make it clear. Do not guess: use "general" if unsure.
-- Each bullet is an object: "text" is the tailored bullet. If you changed the original resume line, put that original line in "original" and give 2 different true alternative phrasings in "alts". If you did not change it, use "" for "original" and [] for "alts".
+- Each bullet is an object: "text" is the tailored bullet. If you changed the original resume line, put that original line in "original" and give 2 different true alternative phrasings in "alts". Give alternatives for at most 6 of the most important changed bullets and use [] for the rest. If you did not change it, use "" for "original" and [] for "alts".
 - If CUSTOM INSTRUCTIONS are given, follow them as far as they stay true to the resume. They never override the rules above. Mention how you applied them in "changes".
 - If a CURRENT DRAFT is given, improve that draft using the instructions instead of starting over.
 Return ONLY valid JSON, no markdown, in this shape:
-{"needs_text":false,"job_title":"","company":"","keywords":[{"term":"","type":"required"}],"name":"","contact":[""],"summary":"","skills":[{"label":"","items":["",""]}],
+{"needs_text":false,"job_title":"","keywords":[{"term":"","type":"required"}],"name":"","contact":[""],"summary":"","skills":[{"label":"","items":["",""]}],
 "experience":[{"title":"","company":"","location":"","dates":"","bullets":[{"text":"","original":"","alts":["",""]}]}],
 "education":[{"school":"","degree":"","dates":"","details":""}],
 "extras":[{"heading":"Certifications","items":[""]}],
@@ -497,20 +510,13 @@ $('curStatus').innerHTML=STATUS.map(([k,l])=>'<option value="'+k+'">'+l+'</optio
 $('curStatus').onchange=()=>{if(cur)setAppStatus(cur.id,$('curStatus').value)};
 const PLAT=[[/jobstreet/,'JobStreet'],[/linkedin\./,'LinkedIn'],[/indeed\./,'Indeed'],[/glassdoor\./,'Glassdoor'],[/kalibrr\./,'Kalibrr'],[/foundit\./,'foundit'],[/monster\./,'Monster'],[/ziprecruiter/,'ZipRecruiter'],[/bossjob/,'Bossjob'],[/jobs\.ph|jobsph/,'Jobs.ph'],[/philjobnet/,'PhilJobNet'],[/onlinejobs\.ph/,'OnlineJobs.ph'],[/(^|\.)seek\./,'SEEK'],[/myworkdayjobs|workday/,'Workday'],[/greenhouse\.io/,'Greenhouse'],[/lever\.co/,'Lever'],[/ashbyhq/,'Ashby'],[/smartrecruiters/,'SmartRecruiters'],[/wellfound|angel\.co/,'Wellfound'],[/upwork\./,'Upwork'],[/facebook\.|fb\.com/,'Facebook'],[/jobstreet|jobsdb/,'JobsDB']];
 const platKey=n=>String(n||'').toLowerCase().replace(/[^a-z]/g,'');
-const isPlat=n=>!!n&&(PLAT.some(([,x])=>platKey(x)===platKey(n))||/^job\s*street/i.test(n));
 function platformOf(url){if(!url)return '';try{const h=new URL(url).hostname.toLowerCase().replace(/^www\./,'');for(const [re,n] of PLAT)if(re.test(h))return n;
  const p=h.split('.');const base=p.length>2&&p[p.length-2].length<=3?p[p.length-3]:(p[p.length-2]||p[0]);return base.charAt(0).toUpperCase()+base.slice(1)}catch(e){return ''}}
-function companyFromText(r){const jd=(r.jd||'').slice(0,2500);
- let m=jd.match(/^\s*(?:company name|company|employer|hiring company)\s*[:\-]\s*(.{2,60})$/im);if(m)return m[1].trim();
- m=jd.match(/^\s*About\s+(?!the\b|this\b|us\b|you\b|our\b)([A-Z][\w&.'-]*(?:\s[A-Z&][\w&.'-]*){0,3})\s*$/m);if(m)return m[1].trim();
- try{const u=new URL(r.url||'');const x=u.pathname.match(/-at-([a-z0-9-]+?)-\d{6,}/i);if(x&&/linkedin/i.test(u.hostname))return x[1].split('-').map(w=>w.charAt(0).toUpperCase()+w.slice(1)).join(' ')}catch(e){}
- return ''}
-function meta(r){let title=(r.title||'').trim(),company=(r.company||'').trim();if(isPlat(company))company='';
+function meta(r){let title=(r.title||'').trim(),company=(r.company||'').trim();
  if(!title&&r.jd){const l=r.jd.split(/\n/).map(x=>x.trim()).find(x=>x.length>3&&x.length<80);if(l)title=l}
- if(!company)company=companyFromText(r);
  let platform=(r.platform||'').trim()||platformOf(r.url||'');
  if(company&&platform&&platKey(company)===platKey(platform))platform='Company site';
- return{title:title||'Untitled role',company,platform,line:platform?platform+' | '+(company||'Company not found'):(company||'Company not found')}}
+ return{title:title||'Untitled role',company,platform,line:platform?platform+' | '+(company||'Company not set'):(company||'Company not set')}}
 const scol=p=>p>=85?'#059669':p>=70?'#f59e0b':'#dc2626',dshort=ts=>new Date(ts).toLocaleDateString(undefined,{month:'short',day:'numeric'});
 function clearWorkspace(){clearTimeout(tm);tm=null;cur=null;f=null;hidePop();lastSig='';lastPct=0;ctxKw.clear();
  $('rres').style.display='none';$('pres').style.display='none';$('rph').style.display='';$('pph').style.display='';$('fit').style.display='none';all('.tb',b=>b.disabled=true);syncStatus();updSummary()}
@@ -544,6 +550,7 @@ function renderHist(){const A=hist(),box=$('hlist');$('hsum').textContent='Histo
  if(!A.length){box.innerHTML='<div class="hint" style="margin-top:8px">Tailored resumes you create appear here as cards. Track each job by status. Everything is saved only in this browser.</div>';return}
  if(!L.length){box.innerHTML='<div class="hint" style="margin-top:8px">No sessions match. <a href="#" id="hclr">Clear filters</a></div>';$('hclr').onclick=e=>{e.preventDefault();hFilter='all';hQuery='';$('hq').value='';renderHist()};return}
  L.forEach(r=>box.appendChild(histCard(r)))}
+$('co').onchange=()=>{const url=$('url').value.trim(),jd=$('jd').value.trim();if(cur&&(cur.url||'')===url&&(cur.jd||'')===jd.slice(0,8000))updateRec(cur.id,{company:clean($('co').value)})};
 $('hq').oninput=()=>{hQuery=$('hq').value.trim();renderHist()};$('hs').onchange=()=>{hSort=$('hs').value;renderHist()};
 $('hexp').onclick=()=>{const h=hist();if(!h.length)return;saveBlob(new Blob([JSON.stringify({app:'resume-tailor',version:'3.6',exported:new Date().toISOString(),history:h},null,1)],{type:'application/json'}),'resume-tailor-history-'+new Date().toISOString().slice(0,10)+'.json')};
 $('himp').onclick=()=>$('hfile').click();
@@ -553,7 +560,7 @@ $('hfile').onchange=async()=>{const fl=$('hfile').files[0];$('hfile').value='';i
   if(putHist([...hist(),...add].sort((a,b)=>(b.upd||b.ts||0)-(a.upd||a.ts||0)))){renderHist();flash('Imported '+add.length+' session'+(add.length>1?'s':'')+'.')}}
  catch(e){setErr('That file is not a valid history backup.')}};
 async function openRec(id){const r=hist().find(x=>x.id===id);if(!r)return;await flush();cur=JSON.parse(JSON.stringify(r));cur.d.h=cur.d.h||{};lastPct=0;lastSig='';ctxKw.clear();hidePop();
- $('url').value=cur.url||'';$('jd').value=cur.jd||'';$('paper').value=cur.paper||'a4';resumeName=resumeName||'From history';updSummary();
+ $('url').value=cur.url||'';$('jd').value=cur.jd||'';$('co').value=cur.company||'';$('paper').value=cur.paper||'a4';resumeName=resumeName||'From history';updSummary();
  showOut();renderAll();await refresh(false);renderHist();focusPreview()}
 function showOut(){$('rres').style.display='flex';$('pres').style.display='block';$('rph').style.display='none';$('pph').style.display='none';$('fit').style.display='inline-block';all('.tb',b=>b.disabled=false)}
 function focusPreview(){if(window.innerWidth<1180)$('center').scrollIntoView({behavior:'smooth'})}
@@ -652,34 +659,36 @@ $('paper').onchange=()=>{if(cur){cur.paper=$('paper').value;lastSig='';refresh()
 all('.chips',c=>{['Highlight leadership','Focus on hardware operations','Stress results that are already in my resume','Make it more concise'].forEach(t=>{
  const b=document.createElement('button');b.type='button';b.className='chip';b.textContent=t;
  b.onclick=()=>{const x=$(c.dataset.t);x.value=(x.value.trim()?x.value.trim().replace(/\.?$/,'. '):'')+t+'.';x.focus()};c.appendChild(b)})});
+function ticker(label){const t0=Date.now();setStatus(label);const iv=setInterval(()=>setStatus(label+' '+Math.round((Date.now()-t0)/1000)+'s'),1000);return()=>clearInterval(iv)}
+const fail=e=>{setStatus('');const m=(e&&e.message)||'Something went wrong. Please try again.';if(m==='Cancelled.')flash('Cancelled.');else setErr(m)};
 function needKey(){const key=$('key').value.trim();if(!key){$('key').focus();throw new Error('Please paste your API key in the AI provider box first.')}saveSettings();return key}
 async function run(refine){setErr('');
  if(!resumeText&&!(refine&&cur)){setErr('Upload your resume PDF or pick a saved profile first.');setInOpen(true);return}
- const jd=$('jd').value.trim(),url=$('url').value.trim();
+ const jd=$('jd').value.trim(),url=$('url').value.trim(),company=clean($('co').value);
  if(!jd&&!url){setErr('Add a job link or paste the job description.');setInOpen(true);return}
  const rv=$('rins').value.trim(),kwNote=refine&&ctxKw.size?'Add these keywords where they are true for me: '+[...ctxKw].join(', ')+'.':'';
  if(refine&&!rv&&!kwNote){setErr('Type your feedback or pick missing keywords first.');return}
  const ins=[$('ins').value.trim(),refine?rv:'',kwNote].filter(Boolean).join('. '),core=$('core').value.trim();
  busy(true);
- try{await flush();const key=needKey();setStatus('Tailoring to the job...');const base=resumeText||plain(cur.d);
-  const r=await callAI(key,PROMPT+'\n\nJOB LINK: '+(url||'none')+'\n\nJOB DESCRIPTION TEXT:\n'+(jd||'(not provided)')+'\n\nRESUME TEXT:\n'+base+(core?'\n\nCORE SKILLS (true, keep when relevant):\n'+core:'')+(ins?'\n\nCUSTOM INSTRUCTIONS:\n'+ins:'')+(refine&&cur?'\n\nCURRENT DRAFT (JSON):\n'+JSON.stringify(cur.d,(k,v)=>k==='vars'||k==='vi'?undefined:v):''));
+ try{await flush();const key=needKey();const stop=ticker('Tailoring to the job...');const base=resumeText||plain(cur.d);
+  const r=await callAI(key,PROMPT+'\n\nCOMPANY APPLYING TO: '+(company||'(not given)')+'\n\nJOB LINK: '+(url||'none')+'\n\nJOB DESCRIPTION TEXT:\n'+(jd||'(not provided)')+'\n\nRESUME TEXT:\n'+base+(core?'\n\nCORE SKILLS (true, keep when relevant):\n'+core:'')+(ins?'\n\nCUSTOM INSTRUCTIONS:\n'+ins:'')+(refine&&cur?'\n\nCURRENT DRAFT (JSON):\n'+JSON.stringify(cur.d,(k,v)=>k==='vars'||k==='vi'?undefined:v):'')).finally(stop);
   if(r.needs_text){setInOpen(true);$('jd').focus();throw new Error('I could not read that job link. Please paste the job description text in the box and try again.')}
   const d=normalize(r);if(!d.experience.length&&!d.education.length)throw new Error('The result looked empty. Please try again.');
   let kw=parseKw(r.keywords);if(!kw.length&&cur)kw=kwList();
   const keep=refine&&cur,bl=base.toLowerCase();
-  cur={id:keep?cur.id:Date.now(),ts:keep?cur.ts:Date.now(),status:keep?(cur.status||'saved'):'saved',statusAt:keep?cur.statusAt:Date.now(),appliedAt:keep?cur.appliedAt:null,notes:keep?(cur.notes||''):'',title:clean(r.job_title)||(keep?cur.title:''),company:(isPlat(clean(r.company))?'':clean(r.company))||(keep?cur.company:''),url,jd:jd.slice(0,8000),d,kw,
+  cur={id:keep?cur.id:Date.now(),ts:keep?cur.ts:Date.now(),status:keep?(cur.status||'saved'):'saved',statusAt:keep?cur.statusAt:Date.now(),appliedAt:keep?cur.appliedAt:null,notes:keep?(cur.notes||''):'',title:clean(r.job_title)||(keep?cur.title:''),company,url,jd:jd.slice(0,8000),d,kw,
    origKw:kw.filter(k=>has(bl,k.t)).map(k=>k.t),cover:keep?cur.cover:'',paper:$('paper').value,changes:arr(r.changes).map(clean),gaps:arr(r.gaps).map(clean)};
   if(!keep)lastPct=0;lastSig='';hidePop();ctxKw.clear();$('rins').value='';
   setStatus('Fitting to one page...');showOut();renderAll();await refresh();setInOpen(false);focusPreview();setStatus('')
- }catch(e){setStatus('');setErr((e&&e.message)||'Something went wrong. Please try again.')}
+ }catch(e){fail(e)}
  busy(false)}
 $('go').onclick=()=>run(false);$('rf').onclick=()=>run(true);
 $('cl').onclick=async()=>{setErr('');if(!cur)return;busy(true);
- try{await flush();const key=needKey();setStatus('Writing your cover letter...');
-  const r=await callAI(key,COVER+'\n\nJOB LINK: '+(cur.url||'none')+'\n\nJOB DESCRIPTION TEXT:\n'+(cur.jd||'(not provided)')+'\n\nJOB TITLE: '+(cur.title||'')+' '+(cur.company?'at '+cur.company:'')+'\n\nTAILORED RESUME:\n'+plain(cur.d)+($('ins').value.trim()?'\n\nUSER NOTES:\n'+$('ins').value.trim():''));
+ try{await flush();const key=needKey();const stop=ticker('Writing your cover letter...');
+  const r=await callAI(key,COVER+'\n\nJOB LINK: '+(cur.url||'none')+'\n\nJOB DESCRIPTION TEXT:\n'+(cur.jd||'(not provided)')+'\n\nJOB TITLE: '+(cur.title||'')+' '+(cur.company?'at '+cur.company:'')+'\n\nTAILORED RESUME:\n'+plain(cur.d)+($('ins').value.trim()?'\n\nUSER NOTES:\n'+$('ins').value.trim():'')).finally(stop);
   const t=cleanLetter(r.letter);if(t.length<80)throw new Error('The letter looked empty. Please try again.');
   cur.cover=t;renderAll();saveRec();setStatus('')}
- catch(e){setStatus('');setErr((e&&e.message)||'Something went wrong. Please try again.')}
+ catch(e){fail(e)}
  busy(false)};
 $('cltext').oninput=()=>{if(cur){cur.cover=$('cltext').value;clearTimeout(tc);tc=setTimeout(saveRec,800)}};
 $('dlpdf').onclick=async()=>{await flush();if(f)saveBlob(f.doc.output('blob'),fname(cur.d,'Resume')+'.pdf')};
