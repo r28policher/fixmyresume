@@ -133,6 +133,7 @@ body.busy #loadbar{display:block}@keyframes sl{from{background-position:-50% 0}t
 select.st-saved{background:#f3f4f6;color:#374151}select.st-applied{background:#dbeafe;color:#1d4ed8}select.st-interviewing{background:#fef3c7;color:#b45309}select.st-offered{background:#d1fae5;color:#047857}select.st-rejected{background:#ffe4e6;color:#be123c}
 button.danger{background:#dc2626;border-color:#dc2626;color:#fff}button.danger:hover:not(:disabled){background:#b91c1c}
 .toolbar .stwrap{display:none;align-items:center;gap:6px}.toolbar .stwrap label{margin:0;font-size:.76rem;color:var(--mute)}
+.hc-more input{margin:5px 0 0;font-size:.8rem;padding:6px 9px}
 </style>
 </head>
 <body>
@@ -166,7 +167,7 @@ button.danger{background:#dc2626;border-color:#dc2626;color:#fff}button.danger:h
  <div class="panel"><details open class="drawer" id="histBox"><summary id="hsum">History</summary>
   <div id="hstats" class="hint" style="margin-top:8px"></div>
   <div id="hchips" class="chips" style="margin-top:8px"></div>
-  <div class="line" style="margin-top:8px;flex-wrap:nowrap"><input type="text" id="hq" placeholder="Search company, title or notes" aria-label="Search history"><select id="hs" aria-label="Sort history" style="width:auto"><option value="new">Newest</option><option value="score">Best match</option><option value="company">Company A-Z</option></select></div>
+  <div class="line" style="margin-top:8px;flex-wrap:nowrap"><input type="text" id="hq" placeholder="Search company, platform, title or notes" aria-label="Search history"><select id="hs" aria-label="Sort history" style="width:auto"><option value="new">Newest</option><option value="score">Best match</option><option value="company">Company A-Z</option></select></div>
   <div id="hlist"></div>
   <div class="line" style="margin-top:12px"><button class="ghost sm" id="hexp">Export backup</button><button class="ghost sm" id="himp">Import</button><input type="file" id="hfile" accept="application/json" hidden></div>
  </details></div>
@@ -358,7 +359,7 @@ $('inToggle').onclick=()=>setInOpen($('inPanel').classList.contains('collapsed')
 function updSummary(){$('sumResume').textContent=resumeName||'No resume yet';
  const url=$('url').value.trim(),jd=$('jd').value.trim();let j='No job added yet';
  if(cur&&cur.title&&(cur.url||'')===url&&(cur.jd||'')===jd.slice(0,8000))j=cur.title+(cur.company?' @ '+cur.company:'');
- else if(url){try{j=new URL(url).hostname.replace(/^www\./,'')}catch(e){j=url}}
+ else if(url){j=platformOf(url)||url}
  else if(jd)j=jd.replace(/\s+/g,' ').slice(0,60)+(jd.length>60?'...':'');
  $('sumJob').textContent=j}
 $('url').oninput=updSummary;$('jd').oninput=updSummary;
@@ -453,6 +454,7 @@ Rules:
 - Put the most relevant experience and skills first. Cut or shorten less relevant items.
 - The result must fit on ONE page: summary of 2 sentences max; skills in 3-5 short groups; 3-4 bullets for recent roles, 1-2 for older ones; each bullet under 25 words.
 - Keep contact details exactly as in the resume (name, email, phone, location, links).
+- "job_title" and "company": the exact job title and the hiring company's name from the job post. The company is the employer, never the job site (for example JobStreet or LinkedIn). Use "" if the post does not say.
 - List experience in reverse chronological order: the current or most recent job first. Do the same for education.
 - "keywords": the 15 to 25 most important skills, tools, qualifications and terms in the job post. Keep each term short (1 to 3 words), written as the job post writes it. Set "type" to "required" for must-have items (for example under "requirements", "must have", "minimum"), "preferred" for nice-to-have items (for example "preferred", "a plus", "bonus"), and "general" when the post does not make it clear. Do not guess: use "general" if unsure.
 - Each bullet is an object: "text" is the tailored bullet. If you changed the original resume line, put that original line in "original" and give 2 different true alternative phrasings in "alts". If you did not change it, use "" for "original" and [] for "alts".
@@ -493,10 +495,22 @@ function setAppStatus(id,v){const r=hist().find(x=>x.id===id)||(cur&&cur.id===id
 function syncStatus(){const w=$('stwrap');if(!cur){w.style.display='none';return}w.style.display='inline-flex';const s=$('curStatus');s.value=cur.status||'saved';s.className='stsel st-'+s.value}
 $('curStatus').innerHTML=STATUS.map(([k,l])=>'<option value="'+k+'">'+l+'</option>').join('');
 $('curStatus').onchange=()=>{if(cur)setAppStatus(cur.id,$('curStatus').value)};
-function meta(r){let title=(r.title||'').trim(),co=(r.company||'').trim();
+const PLAT=[[/jobstreet/,'JobStreet'],[/linkedin\./,'LinkedIn'],[/indeed\./,'Indeed'],[/glassdoor\./,'Glassdoor'],[/kalibrr\./,'Kalibrr'],[/foundit\./,'foundit'],[/monster\./,'Monster'],[/ziprecruiter/,'ZipRecruiter'],[/bossjob/,'Bossjob'],[/jobs\.ph|jobsph/,'Jobs.ph'],[/philjobnet/,'PhilJobNet'],[/onlinejobs\.ph/,'OnlineJobs.ph'],[/(^|\.)seek\./,'SEEK'],[/myworkdayjobs|workday/,'Workday'],[/greenhouse\.io/,'Greenhouse'],[/lever\.co/,'Lever'],[/ashbyhq/,'Ashby'],[/smartrecruiters/,'SmartRecruiters'],[/wellfound|angel\.co/,'Wellfound'],[/upwork\./,'Upwork'],[/facebook\.|fb\.com/,'Facebook'],[/jobstreet|jobsdb/,'JobsDB']];
+const platKey=n=>String(n||'').toLowerCase().replace(/[^a-z]/g,'');
+const isPlat=n=>!!n&&(PLAT.some(([,x])=>platKey(x)===platKey(n))||/^job\s*street/i.test(n));
+function platformOf(url){if(!url)return '';try{const h=new URL(url).hostname.toLowerCase().replace(/^www\./,'');for(const [re,n] of PLAT)if(re.test(h))return n;
+ const p=h.split('.');const base=p.length>2&&p[p.length-2].length<=3?p[p.length-3]:(p[p.length-2]||p[0]);return base.charAt(0).toUpperCase()+base.slice(1)}catch(e){return ''}}
+function companyFromText(r){const jd=(r.jd||'').slice(0,2500);
+ let m=jd.match(/^\s*(?:company name|company|employer|hiring company)\s*[:\-]\s*(.{2,60})$/im);if(m)return m[1].trim();
+ m=jd.match(/^\s*About\s+(?!the\b|this\b|us\b|you\b|our\b)([A-Z][\w&.'-]*(?:\s[A-Z&][\w&.'-]*){0,3})\s*$/m);if(m)return m[1].trim();
+ try{const u=new URL(r.url||'');const x=u.pathname.match(/-at-([a-z0-9-]+?)-\d{6,}/i);if(x&&/linkedin/i.test(u.hostname))return x[1].split('-').map(w=>w.charAt(0).toUpperCase()+w.slice(1)).join(' ')}catch(e){}
+ return ''}
+function meta(r){let title=(r.title||'').trim(),company=(r.company||'').trim();if(isPlat(company))company='';
  if(!title&&r.jd){const l=r.jd.split(/\n/).map(x=>x.trim()).find(x=>x.length>3&&x.length<80);if(l)title=l}
- if(!co&&r.url){try{co=new URL(r.url).hostname.replace(/^www\./,'')}catch(e){}}
- return{title:title||'Untitled role',company:co||'Company not found'}}
+ if(!company)company=companyFromText(r);
+ let platform=(r.platform||'').trim()||platformOf(r.url||'');
+ if(company&&platform&&platKey(company)===platKey(platform))platform='Company site';
+ return{title:title||'Untitled role',company,platform,line:platform?platform+' | '+(company||'Company not found'):(company||'Company not found')}}
 const scol=p=>p>=85?'#059669':p>=70?'#f59e0b':'#dc2626',dshort=ts=>new Date(ts).toLocaleDateString(undefined,{month:'short',day:'numeric'});
 function clearWorkspace(){clearTimeout(tm);tm=null;cur=null;f=null;hidePop();lastSig='';lastPct=0;ctxKw.clear();
  $('rres').style.display='none';$('pres').style.display='none';$('rph').style.display='';$('pph').style.display='';$('fit').style.display='none';all('.tb',b=>b.disabled=true);syncStatus();updSummary()}
@@ -504,8 +518,8 @@ function delRec(id){const was=cur&&cur.id===id;putHist(hist().filter(x=>x.id!==i
 function histCard(r){const m=meta(r),el=document.createElement('div'),p=r.score;el.className='hcard'+(cur&&cur.id===r.id?' on':'');el.dataset.st=r.status;
  el.innerHTML='<div class="hc-top"><div class="hc-main"><div class="hc-title"></div><div class="hc-co"></div></div><div class="hc-score" title="ATS match score" style="--p:'+(p||0)+';--c:'+(p==null?'#9ca3af':scol(p))+'"><span>'+(p==null?'-':p+'%')+'</span></div></div>'
   +'<div class="hc-meta"></div><div class="hc-row"><select class="hc-status" aria-label="Application status"></select><button class="sm" data-a="open" title="Restore this session">Restore</button><button class="ghost sm" data-a="del" title="Delete this session">Delete</button></div>'
-  +'<details class="hc-more"><summary>Notes and downloads</summary><textarea placeholder="Notes: recruiter, interview date, salary..."></textarea><div class="line"><button class="ghost sm" data-a="pdf">PDF</button><button class="ghost sm" data-a="docx">Word</button><button class="ghost sm" data-a="link">Job link</button></div></details>';
- el.querySelector('.hc-title').textContent=m.title;el.querySelector('.hc-co').textContent=m.company;el.querySelector('.hc-co').title=m.company;
+  +'<details class="hc-more"><summary>Details, notes and downloads</summary><input type="text" class="f-plat" aria-label="Platform"><input type="text" class="f-co" aria-label="Company"><input type="text" class="f-title" aria-label="Job title"><textarea placeholder="Notes: recruiter, interview date, salary..."></textarea><div class="line"><button class="ghost sm" data-a="pdf">PDF</button><button class="ghost sm" data-a="docx">Word</button><button class="ghost sm" data-a="link">Job link</button></div></details>';
+ el.querySelector('.hc-title').textContent=m.title;el.querySelector('.hc-co').textContent=m.line;el.querySelector('.hc-co').title=m.line;
  el.querySelector('.hc-meta').textContent='Saved '+dshort(r.ts)+(r.appliedAt?' | Applied '+dshort(r.appliedAt):'')+(r.cover?' | Cover letter':'');
  const sel=el.querySelector('.hc-status');sel.innerHTML=STATUS.map(([k,l])=>'<option value="'+k+'">'+l+'</option>').join('');sel.value=r.status;sel.className='hc-status st-'+r.status;sel.onchange=()=>setAppStatus(r.id,sel.value);
  const q=a=>el.querySelector('[data-a="'+a+'"]'),det=el.querySelector('details'),ta=el.querySelector('textarea');
@@ -515,6 +529,8 @@ function histCard(r){const m=meta(r),el=document.createElement('div'),p=r.score;
  q('docx').onclick=async()=>{const x=fit(r.d,r.paper);saveBlob(await resumeDocx(x.d,x.fs,x.m,r.paper),fname(r.d,'Resume')+'.docx')};
  if(r.url)q('link').onclick=()=>window.open(r.url,'_blank','noopener');else{q('link').disabled=true;q('link').title='No job link saved'}
  det.open=hOpen.has(r.id);det.ontoggle=()=>{det.open?hOpen.add(r.id):hOpen.delete(r.id)};
+ const fp=el.querySelector('.f-plat'),fc=el.querySelector('.f-co'),ft=el.querySelector('.f-title');fp.value=r.platform||'';fc.value=r.company||'';ft.value=r.title||'';fp.placeholder='Platform: '+(m.platform||'e.g. JobStreet');fc.placeholder='Company: '+(m.company||'e.g. Accenture');ft.placeholder='Job title: '+m.title;
+ const sv=()=>updateRec(r.id,{platform:fp.value.trim(),company:fc.value.trim(),title:ft.value.trim()});fp.onchange=fc.onchange=ft.onchange=sv;
  ta.value=r.notes;let nt;ta.oninput=()=>{clearTimeout(nt);nt=setTimeout(()=>updateRec(r.id,{notes:ta.value},false),500)};
  return el}
 function renderHist(){const A=hist(),box=$('hlist');$('hsum').textContent='History ('+A.length+')';
@@ -522,8 +538,8 @@ function renderHist(){const A=hist(),box=$('hlist');$('hsum').textContent='Histo
  [['all','All'],...STATUS].forEach(([k,l])=>{const b=document.createElement('button');b.type='button';b.className='fchip'+(hFilter===k?' on':'');b.textContent=l+' '+cnt(k);b.onclick=()=>{hFilter=k;renderHist()};ch.appendChild(b)});
  const sc=A.filter(r=>r.score!=null);$('hstats').textContent=A.length?A.length+' tracked | avg match '+(sc.length?Math.round(sc.reduce((a,r)=>a+r.score,0)/sc.length)+'%':'n/a')+' | '+(cnt('applied')+cnt('interviewing'))+' active':'';
  let L=A.filter(r=>hFilter==='all'||r.status===hFilter);
- if(hQuery){const q=hQuery.toLowerCase();L=L.filter(r=>{const m=meta(r);return (m.title+' '+m.company+' '+r.notes).toLowerCase().includes(q)})}
- L.sort(hSort==='score'?(a,b)=>(b.score||0)-(a.score||0):hSort==='company'?(a,b)=>meta(a).company.localeCompare(meta(b).company):(a,b)=>(b.upd||b.ts)-(a.upd||a.ts));
+ if(hQuery){const q=hQuery.toLowerCase();L=L.filter(r=>{const m=meta(r);return (m.title+' '+m.company+' '+m.platform+' '+r.notes).toLowerCase().includes(q)})}
+ L.sort(hSort==='score'?(a,b)=>(b.score||0)-(a.score||0):hSort==='company'?(a,b)=>(meta(a).company||'~').localeCompare(meta(b).company||'~'):(a,b)=>(b.upd||b.ts)-(a.upd||a.ts));
  box.innerHTML='';$('hexp').disabled=!A.length;
  if(!A.length){box.innerHTML='<div class="hint" style="margin-top:8px">Tailored resumes you create appear here as cards. Track each job by status. Everything is saved only in this browser.</div>';return}
  if(!L.length){box.innerHTML='<div class="hint" style="margin-top:8px">No sessions match. <a href="#" id="hclr">Clear filters</a></div>';$('hclr').onclick=e=>{e.preventDefault();hFilter='all';hQuery='';$('hq').value='';renderHist()};return}
@@ -651,7 +667,7 @@ async function run(refine){setErr('');
   const d=normalize(r);if(!d.experience.length&&!d.education.length)throw new Error('The result looked empty. Please try again.');
   let kw=parseKw(r.keywords);if(!kw.length&&cur)kw=kwList();
   const keep=refine&&cur,bl=base.toLowerCase();
-  cur={id:keep?cur.id:Date.now(),ts:keep?cur.ts:Date.now(),status:keep?(cur.status||'saved'):'saved',statusAt:keep?cur.statusAt:Date.now(),appliedAt:keep?cur.appliedAt:null,notes:keep?(cur.notes||''):'',title:clean(r.job_title)||(keep?cur.title:''),company:clean(r.company)||(keep?cur.company:''),url,jd:jd.slice(0,8000),d,kw,
+  cur={id:keep?cur.id:Date.now(),ts:keep?cur.ts:Date.now(),status:keep?(cur.status||'saved'):'saved',statusAt:keep?cur.statusAt:Date.now(),appliedAt:keep?cur.appliedAt:null,notes:keep?(cur.notes||''):'',title:clean(r.job_title)||(keep?cur.title:''),company:(isPlat(clean(r.company))?'':clean(r.company))||(keep?cur.company:''),url,jd:jd.slice(0,8000),d,kw,
    origKw:kw.filter(k=>has(bl,k.t)).map(k=>k.t),cover:keep?cur.cover:'',paper:$('paper').value,changes:arr(r.changes).map(clean),gaps:arr(r.gaps).map(clean)};
   if(!keep)lastPct=0;lastSig='';hidePop();ctxKw.clear();$('rins').value='';
   setStatus('Fitting to one page...');showOut();renderAll();await refresh();setInOpen(false);focusPreview();setStatus('')
